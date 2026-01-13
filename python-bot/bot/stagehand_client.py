@@ -301,23 +301,25 @@ class StagehandClient:
     
     def _analyze_generic(self, client, session_id: str, claim: LinkClaim) -> VerificationResult:
         """Analyze if the current page is relevant to the context."""
-        context = claim.claim_context[:300]
+        # Use full context for date extraction, truncate only for AI prompt
+        full_context = claim.claim_context
+        context_for_prompt = claim.claim_context[:300]
         
         # Check if this looks like an event link (Luma, Eventbrite, etc.)
         url_lower = claim.url.lower()
-        is_event_url = any(x in url_lower for x in ['luma', 'eventbrite', 'meetup', 'lu.ma', 'kickoff', 'open-house', 'event'])
+        is_event_url = any(x in url_lower for x in ['luma', 'eventbrite', 'meetup', 'lu.ma', 'kickoff', 'open-house', 'event', 'ship-it'])
         
-        # Extract any dates/times mentioned in the copy
-        copy_date_info = self._extract_date_from_text(context)
+        # Extract any dates/times mentioned in the copy (use FULL context)
+        copy_date_info = self._extract_date_from_text(full_context)
         
         if is_event_url or copy_date_info:
-            return self._analyze_event_page(client, session_id, claim, context, copy_date_info)
+            return self._analyze_event_page(client, session_id, claim, context_for_prompt, copy_date_info)
         
         try:
             response = client.sessions.extract(
                 session_id,
                 instruction=(
-                    f"Check if this page matches the expected topic from this marketing text: '{context}'\n\n"
+                    f"Check if this page matches the expected topic from this marketing text: '{context_for_prompt}'\n\n"
                     f"IMPORTANT: Focus on whether the PAGE TITLE or main heading matches the expected topic. "
                     f"Event registration pages (like Luma, Eventbrite, etc.) with matching titles ARE aligned. "
                     f"Don't penalize pages for having minimal text if the title clearly matches the topic."
