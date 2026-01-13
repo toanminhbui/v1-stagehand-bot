@@ -414,56 +414,37 @@ class StagehandClient:
             page_time = data.get("event_time", "")
             confidence = data.get("confidence", 0.5)
             
-            # Check for date/time mismatches
+            # Check for date/time mismatches - only flag if ACTUAL values differ
             date_mismatch = False
             mismatch_details = []
             
+            import re
+            
             if copy_date_info.get('date_mentioned') and page_date:
-                # Compare dates - extract day and month for comparison
                 copy_date = copy_date_info['date_mentioned'].lower()
                 page_date_lower = page_date.lower()
                 
-                import re
                 # Extract day number
                 copy_day = re.search(r'\d{1,2}', copy_date)
                 page_day = re.search(r'\d{1,2}', page_date_lower)
                 
-                # Extract month (abbreviated or full)
-                months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
-                copy_month = None
-                page_month = None
-                for i, m in enumerate(months):
-                    if m in copy_date:
-                        copy_month = i
-                    if m in page_date_lower:
-                        page_month = i
-                
-                # Check if both day and month match
-                day_match = copy_day and page_day and copy_day.group() == page_day.group()
-                month_match = copy_month is not None and page_month is not None and copy_month == page_month
-                
-                if copy_day and page_day and not day_match:
+                # Only mismatch if day numbers are DIFFERENT
+                if copy_day and page_day and copy_day.group() != page_day.group():
                     date_mismatch = True
-                    mismatch_details.append(f"Date mismatch: copy says '{copy_date}', page shows '{page_date}'")
-                elif copy_month is not None and page_month is not None and not month_match:
-                    date_mismatch = True
-                    mismatch_details.append(f"Month mismatch: copy says '{copy_date}', page shows '{page_date}'")
+                    mismatch_details.append(f"Date: copy mentions day {copy_day.group()}, page shows day {page_day.group()}")
             
             if copy_date_info.get('time_mentioned') and page_time:
                 copy_time = copy_date_info['time_mentioned'].lower()
                 page_time_lower = page_time.lower()
                 
-                import re
-                # Extract all hours mentioned (for ranges like "5-7 PM")
-                copy_hours = re.findall(r'\d{1,2}', copy_time)
-                page_hours = re.findall(r'\d{1,2}', page_time_lower)
+                # Extract start hour from time ranges
+                copy_start = re.search(r'^(\d{1,2})', copy_time)
+                page_start = re.search(r'^(\d{1,2})', page_time_lower)
                 
-                # Check if the times overlap (at least one hour matches)
-                times_match = bool(set(copy_hours) & set(page_hours))
-                
-                if copy_hours and page_hours and not times_match:
+                # Only mismatch if start times are DIFFERENT
+                if copy_start and page_start and copy_start.group() != page_start.group():
                     date_mismatch = True
-                    mismatch_details.append(f"Time mismatch: copy says '{copy_time}', page shows '{page_time}'")
+                    mismatch_details.append(f"Time: copy mentions {copy_time}, page shows {page_time}")
             
             # Determine status
             if date_mismatch:
