@@ -398,10 +398,11 @@ class StagehandClient:
             response = client.sessions.extract(
                 session_id,
                 instruction=(
-                    f"This appears to be an event page. Extract the event details.\n\n"
+                    f"Extract the event details EXACTLY as shown on this page.\n\n"
+                    f"IMPORTANT: Read the date and time EXACTLY as displayed on the page. "
+                    f"Do NOT guess or infer dates. Copy the exact text shown for the event date and time.\n\n"
                     f"Marketing copy context: '{context}'\n\n"
-                    f"Extract: event name, date, time, and location from this page. "
-                    f"Check if the event name/topic matches what's described in the marketing copy."
+                    f"Extract: the event name, the EXACT date shown, the EXACT time shown, and location."
                 ),
                 schema=EVENT_SCHEMA,
             )
