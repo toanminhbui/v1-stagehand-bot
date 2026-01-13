@@ -377,11 +377,18 @@ class StagehandClient:
                 result['date_mentioned'] = match.group(0)
                 break
         
-        # Time patterns: "6 PM", "6:00 PM", "18:00", "9 PM EST"
-        time_pattern = r'(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?(?:\s*(est|pst|cst|mst|et|pt))?'
-        time_match = re.search(time_pattern, text)
-        if time_match:
-            result['time_mentioned'] = time_match.group(0)
+        # Time patterns - require AM/PM or time range format
+        # "6 PM", "6:00 PM", "5-7 PM", "5–7 PM" (with en-dash), "9 PM EST"
+        time_patterns = [
+            r'(\d{1,2})(?::(\d{2}))?\s*[-–]\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)',  # Time range: 5-7 PM, 5–7 PM
+            r'(\d{1,2})(?::(\d{2}))?\s*(am|pm)(?:\s*(est|pst|cst|mst|et|pt))?',  # Single time with AM/PM required
+        ]
+        
+        for pattern in time_patterns:
+            time_match = re.search(pattern, text_lower)
+            if time_match:
+                result['time_mentioned'] = time_match.group(0)
+                break
         
         return result
     
@@ -412,29 +419,49 @@ class StagehandClient:
             mismatch_details = []
             
             if copy_date_info.get('date_mentioned') and page_date:
-                # Simple check: see if the date from copy appears in page date
+                # Compare dates - extract day and month for comparison
                 copy_date = copy_date_info['date_mentioned'].lower()
                 page_date_lower = page_date.lower()
                 
-                # Extract just the day number for comparison
                 import re
+                # Extract day number
                 copy_day = re.search(r'\d{1,2}', copy_date)
                 page_day = re.search(r'\d{1,2}', page_date_lower)
                 
-                if copy_day and page_day and copy_day.group() != page_day.group():
+                # Extract month (abbreviated or full)
+                months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+                copy_month = None
+                page_month = None
+                for i, m in enumerate(months):
+                    if m in copy_date:
+                        copy_month = i
+                    if m in page_date_lower:
+                        page_month = i
+                
+                # Check if both day and month match
+                day_match = copy_day and page_day and copy_day.group() == page_day.group()
+                month_match = copy_month is not None and page_month is not None and copy_month == page_month
+                
+                if copy_day and page_day and not day_match:
                     date_mismatch = True
                     mismatch_details.append(f"Date mismatch: copy says '{copy_date}', page shows '{page_date}'")
+                elif copy_month is not None and page_month is not None and not month_match:
+                    date_mismatch = True
+                    mismatch_details.append(f"Month mismatch: copy says '{copy_date}', page shows '{page_date}'")
             
             if copy_date_info.get('time_mentioned') and page_time:
                 copy_time = copy_date_info['time_mentioned'].lower()
                 page_time_lower = page_time.lower()
                 
-                # Extract hour for comparison
                 import re
-                copy_hour = re.search(r'\d{1,2}', copy_time)
-                page_hour = re.search(r'\d{1,2}', page_time_lower)
+                # Extract all hours mentioned (for ranges like "5-7 PM")
+                copy_hours = re.findall(r'\d{1,2}', copy_time)
+                page_hours = re.findall(r'\d{1,2}', page_time_lower)
                 
-                if copy_hour and page_hour and copy_hour.group() != page_hour.group():
+                # Check if the times overlap (at least one hour matches)
+                times_match = bool(set(copy_hours) & set(page_hours))
+                
+                if copy_hours and page_hours and not times_match:
                     date_mismatch = True
                     mismatch_details.append(f"Time mismatch: copy says '{copy_time}', page shows '{page_time}'")
             
