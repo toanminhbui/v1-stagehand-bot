@@ -1,0 +1,26 @@
+# Slack bot framework
+slack-bolt>=1.18.0
+slack-sdk>=3.23.0
+
+# Web framework (for HTTP mode, optional if using Socket Mode)
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# Environment and config
+python-dotenv>=1.0.0
+
+# HTTP client
+httpx>=0.25.0
+
+# Data validation and serialization
+pydantic>=2.5.0
+
+# Async support
+aiohttp>=3.9.0
+
+# Stagehand - Browser automation with AI
+stagehand
+
+# Playwright (installed by stagehand, but explicit for clarity)
+playwright>=1.40.0
+
