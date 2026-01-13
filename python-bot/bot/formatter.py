@@ -91,6 +91,29 @@ def format_single_result(index: int, result: VerificationResult) -> str:
     if result.page_title and result.status != AlignmentStatus.ERROR:
         line += f"\n  _Page: \"{result.page_title}\"_"
     
+    # Add event date/time info if available
+    if result.details:
+        if result.details.get("date_mismatch"):
+            # Highlight date/time mismatches
+            copy_date = result.details.get("copy_date", "")
+            copy_time = result.details.get("copy_time", "")
+            event_date = result.details.get("event_date", "")
+            event_time = result.details.get("event_time", "")
+            
+            line += f"\n  ⚠️ *Date/Time Mismatch Detected:*"
+            if copy_date and event_date:
+                line += f"\n    • Copy mentions: `{copy_date}` → Page shows: `{event_date}`"
+            if copy_time and event_time:
+                line += f"\n    • Copy mentions: `{copy_time}` → Page shows: `{event_time}`"
+        elif result.details.get("is_event_page"):
+            # Show event info for aligned events
+            event_date = result.details.get("event_date", "")
+            event_time = result.details.get("event_time", "")
+            if event_date or event_time:
+                line += f"\n  📅 Event: {event_date}"
+                if event_time:
+                    line += f" at {event_time}"
+    
     # Add confidence indicator for non-errors
     if result.status != AlignmentStatus.ERROR:
         confidence_pct = int(result.confidence * 100)

@@ -53,6 +53,21 @@ GENERIC_SCHEMA = {
     "required": ["is_relevant", "page_title", "topic_match", "confidence", "reason"],
 }
 
+EVENT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "is_event_page": {"type": "boolean", "description": "Whether this is an event page (Luma, Eventbrite, etc.)"},
+        "page_title": {"type": "string", "description": "The title/name of the event"},
+        "event_date": {"type": "string", "description": "The date of the event (e.g., 'January 20, 2026' or 'Jan 20')"},
+        "event_time": {"type": "string", "description": "The time of the event (e.g., '6:00 PM EST' or '18:00')"},
+        "event_location": {"type": "string", "description": "The location or 'Online' if virtual"},
+        "topic_match": {"type": "boolean", "description": "Does the event name match the expected topic?"},
+        "confidence": {"type": "number", "description": "Confidence score between 0 and 1"},
+        "reason": {"type": "string", "description": "Brief conclusion"},
+    },
+    "required": ["is_event_page", "page_title", "confidence", "reason"],
+}
+
 
 class StagehandClient:
     """Client for analyzing web pages using Stagehand Python SDK."""
@@ -288,6 +303,16 @@ class StagehandClient:
         """Analyze if the current page is relevant to the context."""
         context = claim.claim_context[:300]
         
+        # Check if this looks like an event link (Luma, Eventbrite, etc.)
+        url_lower = claim.url.lower()
+        is_event_url = any(x in url_lower for x in ['luma', 'eventbrite', 'meetup', 'lu.ma', 'kickoff', 'open-house', 'event'])
+        
+        # Extract any dates/times mentioned in the copy
+        copy_date_info = self._extract_date_from_text(context)
+        
+        if is_event_url or copy_date_info:
+            return self._analyze_event_page(client, session_id, claim, context, copy_date_info)
+        
         try:
             response = client.sessions.extract(
                 session_id,
@@ -327,6 +352,131 @@ class StagehandClient:
                 details={
                     "page_type": data.get("page_type"),
                     "topic_match": topic_match,
+                },
+            )
+        except Exception as e:
+            return self._fallback_result(claim, str(e))
+    
+    def _extract_date_from_text(self, text: str) -> dict:
+        """Extract date/time information from marketing copy."""
+        import re
+        
+        result = {}
+        text_lower = text.lower()
+        
+        # Common date patterns
+        # "Jan 18", "January 18", "Jan 18th", "January 18, 2026"
+        date_patterns = [
+            r'(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:[,\s]+(\d{4}))?',
+            r'(\d{1,2})[/\-](\d{1,2})(?:[/\-](\d{2,4}))?',  # 1/18, 01-18-2026
+        ]
+        
+        for pattern in date_patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                result['date_mentioned'] = match.group(0)
+                break
+        
+        # Time patterns: "6 PM", "6:00 PM", "18:00", "9 PM EST"
+        time_pattern = r'(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?(?:\s*(est|pst|cst|mst|et|pt))?'
+        time_match = re.search(time_pattern, text)
+        if time_match:
+            result['time_mentioned'] = time_match.group(0)
+        
+        return result
+    
+    def _analyze_event_page(self, client, session_id: str, claim: LinkClaim, context: str, copy_date_info: dict) -> VerificationResult:
+        """Analyze an event page and verify date/time matches."""
+        try:
+            response = client.sessions.extract(
+                session_id,
+                instruction=(
+                    f"This appears to be an event page. Extract the event details.\n\n"
+                    f"Marketing copy context: '{context}'\n\n"
+                    f"Extract: event name, date, time, and location from this page. "
+                    f"Check if the event name/topic matches what's described in the marketing copy."
+                ),
+                schema=EVENT_SCHEMA,
+            )
+            
+            data = self._get_extract_data(response)
+            
+            is_event = data.get("is_event_page", False)
+            topic_match = data.get("topic_match", False)
+            page_date = data.get("event_date", "")
+            page_time = data.get("event_time", "")
+            confidence = data.get("confidence", 0.5)
+            
+            # Check for date/time mismatches
+            date_mismatch = False
+            mismatch_details = []
+            
+            if copy_date_info.get('date_mentioned') and page_date:
+                # Simple check: see if the date from copy appears in page date
+                copy_date = copy_date_info['date_mentioned'].lower()
+                page_date_lower = page_date.lower()
+                
+                # Extract just the day number for comparison
+                import re
+                copy_day = re.search(r'\d{1,2}', copy_date)
+                page_day = re.search(r'\d{1,2}', page_date_lower)
+                
+                if copy_day and page_day and copy_day.group() != page_day.group():
+                    date_mismatch = True
+                    mismatch_details.append(f"Date mismatch: copy says '{copy_date}', page shows '{page_date}'")
+            
+            if copy_date_info.get('time_mentioned') and page_time:
+                copy_time = copy_date_info['time_mentioned'].lower()
+                page_time_lower = page_time.lower()
+                
+                # Extract hour for comparison
+                import re
+                copy_hour = re.search(r'\d{1,2}', copy_time)
+                page_hour = re.search(r'\d{1,2}', page_time_lower)
+                
+                if copy_hour and page_hour and copy_hour.group() != page_hour.group():
+                    date_mismatch = True
+                    mismatch_details.append(f"Time mismatch: copy says '{copy_time}', page shows '{page_time}'")
+            
+            # Determine status
+            if date_mismatch:
+                status = AlignmentStatus.MISALIGNED
+                reason = " | ".join(mismatch_details)
+                confidence = 0.9  # High confidence in the mismatch
+            elif is_event and topic_match:
+                status = AlignmentStatus.ALIGNED
+                reason = data.get("reason", "Event page matches")
+                if page_date:
+                    reason += f" (Event: {page_date}"
+                    if page_time:
+                        reason += f" at {page_time}"
+                    reason += ")"
+            elif topic_match:
+                status = AlignmentStatus.ALIGNED
+                reason = data.get("reason", "Topic matches")
+            elif confidence > 0.4:
+                status = AlignmentStatus.QUESTIONABLE
+                reason = data.get("reason", "Partial match")
+            else:
+                status = AlignmentStatus.MISALIGNED
+                reason = data.get("reason", "Does not match")
+            
+            return VerificationResult(
+                url=claim.url,
+                claim_type=claim.claim_type,
+                status=status,
+                confidence=confidence,
+                short_reason=reason,
+                page_title=data.get("page_title"),
+                details={
+                    "is_event_page": is_event,
+                    "event_date": page_date,
+                    "event_time": page_time,
+                    "event_location": data.get("event_location"),
+                    "topic_match": topic_match,
+                    "copy_date": copy_date_info.get('date_mentioned'),
+                    "copy_time": copy_date_info.get('time_mentioned'),
+                    "date_mismatch": date_mismatch,
                 },
             )
         except Exception as e:
