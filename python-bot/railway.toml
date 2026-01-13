@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python -m bot.app"
+startCommand = "bash start.sh"
 healthcheckPath = ""
 restartPolicyType = "on_failure"
 
