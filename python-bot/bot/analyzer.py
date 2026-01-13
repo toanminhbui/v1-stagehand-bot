@@ -202,15 +202,19 @@ def extract_links_and_claims(message_text: str) -> List[LinkClaim]:
         except Exception:
             continue
         
-        # Get surrounding context
+        # Get surrounding context for claim type detection
         context = get_context_around_url(message_text, start, end)
         
         # Detect claim type
         claim_type, extracted_name = detect_claim_type(context, url)
         
+        # For the claim_context, use the FULL message so date/time extraction works
+        # This ensures we capture dates/times mentioned anywhere in the message
+        full_context = message_text[:1000]  # First 1000 chars should cover most marketing copy
+        
         claims.append(LinkClaim(
             url=url,
-            claim_context=context,
+            claim_context=full_context,
             claim_type=claim_type,
             extracted_name=extracted_name,
         ))
