@@ -68,7 +68,7 @@ def test_extraction(url: str):
         
         # Wait for dynamic content to load
         import time
-        time.sleep(3)
+        time.sleep(2)
         
         # Extract event data
         print("\n🔍 Extracting event data...")

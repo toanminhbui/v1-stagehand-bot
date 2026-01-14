@@ -26,10 +26,20 @@ class WordingIssue:
 
 
 @dataclass
+class ConsistencyIssue:
+    """An internal consistency issue in the copy."""
+    issue_type: str  # "date_mismatch", "day_mismatch", "conflicting_info"
+    description: str
+    conflicting_items: List[str]  # The conflicting pieces of text
+    severity: str  # "minor", "moderate", "critical"
+
+
+@dataclass
 class CopyReviewResult:
     """Result of reviewing marketing copy."""
     spelling_issues: List[SpellingIssue] = field(default_factory=list)
     wording_suggestions: List[WordingIssue] = field(default_factory=list)
+    consistency_issues: List[ConsistencyIssue] = field(default_factory=list)
     overall_score: int = 100  # 0-100 score
     summary: str = ""
 
@@ -69,6 +79,11 @@ Analyze the following marketing copy and provide feedback on:
 1. **Spelling errors** - typos, misspellings
 2. **Grammar issues** - incorrect grammar, punctuation
 3. **Wording suggestions** - ways to make the copy clearer, more engaging, or more professional
+4. **INTERNAL CONSISTENCY** - VERY IMPORTANT! Check for conflicting information within the copy:
+   - Date ranges that don't match (e.g., header says "Jan 17-19" but body says "Jan 29")
+   - Day of week that doesn't match the date (e.g., "Saturday 1/29" when 1/29 isn't a Saturday)
+   - Conflicting times, locations, or other details mentioned in different parts
+   - Schedule items that fall outside the stated date range
 
 Marketing copy to review:
 ---
@@ -92,6 +107,14 @@ Respond with a JSON object in this exact format:
             "severity": "minor|moderate|important"
         }}
     ],
+    "consistency_issues": [
+        {{
+            "issue_type": "date_mismatch|day_mismatch|conflicting_info",
+            "description": "Clear explanation of the inconsistency",
+            "conflicting_items": ["First conflicting text", "Second conflicting text"],
+            "severity": "minor|moderate|critical"
+        }}
+    ],
     "overall_score": 85,
     "summary": "Brief overall assessment of the copy quality"
 }}
@@ -100,6 +123,7 @@ Notes:
 - Only include actual issues, not nitpicks
 - For emojis and casual tone, don't flag as issues if they fit the marketing context
 - Focus on clarity, professionalism, and effectiveness
+- CONSISTENCY ISSUES ARE CRITICAL - date/time mismatches can confuse readers
 - Score from 0-100 where 100 is perfect
 - If no issues found, return empty arrays
 """
@@ -158,9 +182,19 @@ Notes:
                 severity=suggestion.get("severity", "minor"),
             ))
         
+        consistency_issues = []
+        for issue in data.get("consistency_issues", []):
+            consistency_issues.append(ConsistencyIssue(
+                issue_type=issue.get("issue_type", "conflicting_info"),
+                description=issue.get("description", ""),
+                conflicting_items=issue.get("conflicting_items", []),
+                severity=issue.get("severity", "moderate"),
+            ))
+        
         return CopyReviewResult(
             spelling_issues=spelling_issues,
             wording_suggestions=wording_suggestions,
+            consistency_issues=consistency_issues,
             overall_score=data.get("overall_score", 100),
             summary=data.get("summary", ""),
         )
@@ -204,9 +238,24 @@ def format_review_result(result: CopyReviewResult) -> str:
             if suggestion.reason:
                 lines.append(f"     _Reason: {suggestion.reason}_")
     
+    # Consistency issues - these are important!
+    if result.consistency_issues:
+        lines.append(f"\n*⚠️ Consistency Issues ({len(result.consistency_issues)}):*")
+        for issue in result.consistency_issues:
+            severity_emoji = {"minor": "💡", "moderate": "⚠️", "critical": "🚨"}.get(issue.severity, "⚠️")
+            type_label = {
+                "date_mismatch": "Date Mismatch",
+                "day_mismatch": "Day/Date Mismatch", 
+                "conflicting_info": "Conflicting Info"
+            }.get(issue.issue_type, "Issue")
+            lines.append(f"  {severity_emoji} *{type_label}*: {issue.description}")
+            if issue.conflicting_items:
+                for item in issue.conflicting_items:
+                    lines.append(f"     • `{item}`")
+    
     # No issues
-    if not result.spelling_issues and not result.wording_suggestions:
-        lines.append("\n✅ No spelling or wording issues found!")
+    if not result.spelling_issues and not result.wording_suggestions and not result.consistency_issues:
+        lines.append("\n✅ No spelling, wording, or consistency issues found!")
     
     return "\n".join(lines)
 
