@@ -423,9 +423,13 @@ class StagehandClient:
             
             import re
             
-            if copy_date_info.get('date_mentioned') and page_date:
+            # Check if page shows "Past Event" - this is always a mismatch
+            page_date_lower = page_date.lower() if page_date else ""
+            if 'past' in page_date_lower or 'ended' in page_date_lower or 'expired' in page_date_lower:
+                date_mismatch = True
+                mismatch_details.append(f"Event has ended: page shows '{page_date}'")
+            elif copy_date_info.get('date_mentioned') and page_date:
                 copy_date = copy_date_info['date_mentioned'].lower()
-                page_date_lower = page_date.lower()
                 
                 # Extract day number
                 copy_day = re.search(r'\d{1,2}', copy_date)
