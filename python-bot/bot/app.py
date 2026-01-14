@@ -145,16 +145,15 @@ async def analyze_copy(text: str, stagehand_client: StagehandClient, copy_review
     claims = extract_links_and_claims(text)
     logger.info(summarize_claims(claims))
     
-    # Run both analyses concurrently
-    link_task = stagehand_client.analyze_links(claims) if claims else asyncio.coroutine(lambda: [])()
-    review_task = copy_reviewer.review_copy(text)
-    
+    # Run analyses
     if claims:
+        # Run both concurrently when there are links
         link_results, copy_review = await asyncio.gather(
             stagehand_client.analyze_links(claims),
             copy_reviewer.review_copy(text),
         )
     else:
+        # No links, just do copy review
         link_results = []
         copy_review = await copy_reviewer.review_copy(text)
     
