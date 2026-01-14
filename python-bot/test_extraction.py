@@ -64,17 +64,23 @@ def test_extraction(url: str):
         # Navigate to URL
         print(f"\n📍 Navigating to {url}...")
         client.sessions.navigate(session_id, url=url)
-        print("✅ Page loaded")
+        print("✅ Page loaded, waiting for content...")
+        
+        # Wait for dynamic content to load
+        import time
+        time.sleep(3)
         
         # Extract event data
         print("\n🔍 Extracting event data...")
         response = client.sessions.extract(
             session_id,
             instruction=(
-                "Extract the event details EXACTLY as shown on this page.\n\n"
-                "IMPORTANT: Read the date and time EXACTLY as displayed on the page. "
-                "Do NOT guess or infer dates. Copy the exact text shown for the event date and time.\n\n"
-                "Extract: the event name, the EXACT date shown, the EXACT time shown, and location."
+                "Look at this event page and find these specific pieces of information:\n\n"
+                "1. PAGE TITLE: What is the main event name shown in the heading?\n"
+                "2. DATE: What date is shown for this event? Look for text like 'Saturday, January 27' or 'Jan 27-29' or 'Past Event'. This is usually displayed prominently on the page.\n"
+                "3. TIME: What time is shown? Look for text like '3:00 PM' or '3-6 PM EST'\n"
+                "4. LOCATION: What venue or address is shown? Or is it 'Online'?\n\n"
+                "Copy the EXACT text you see on the page for each field. If you cannot find a field, leave it empty string."
             ),
             schema=EVENT_SCHEMA,
         )

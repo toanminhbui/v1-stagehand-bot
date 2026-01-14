@@ -397,14 +397,20 @@ class StagehandClient:
     def _analyze_event_page(self, client, session_id: str, claim: LinkClaim, context: str, copy_date_info: dict) -> VerificationResult:
         """Analyze an event page and verify date/time matches."""
         try:
+            # Wait a moment for dynamic content to load
+            import time
+            time.sleep(2)
+            
             response = client.sessions.extract(
                 session_id,
                 instruction=(
-                    f"Extract the event details EXACTLY as shown on this page.\n\n"
-                    f"IMPORTANT: Read the date and time EXACTLY as displayed on the page. "
-                    f"Do NOT guess or infer dates. Copy the exact text shown for the event date and time.\n\n"
-                    f"Marketing copy context: '{context}'\n\n"
-                    f"Extract: the event name, the EXACT date shown, the EXACT time shown, and location."
+                    f"Look at this event page and find these specific pieces of information:\n\n"
+                    f"1. PAGE TITLE: What is the main event name shown in the heading?\n"
+                    f"2. DATE: What date is shown for this event? Look for text like 'Saturday, January 27' or 'Jan 27-29' or 'Past Event'. This is usually displayed prominently on the page.\n"
+                    f"3. TIME: What time is shown? Look for text like '3:00 PM' or '3-6 PM EST'\n"
+                    f"4. LOCATION: What venue or address is shown? Or is it 'Online'?\n\n"
+                    f"Copy the EXACT text you see on the page for each field. If you cannot find a field, leave it empty string.\n\n"
+                    f"Marketing context for reference: '{context[:200]}'"
                 ),
                 schema=EVENT_SCHEMA,
             )
